@@ -1,9 +1,8 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Clock, FileText, RotateCcw, ExternalLink } from "lucide-react";
+import { Check, Clock, FileText, ExternalLink, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface TaskProject {
@@ -48,11 +47,11 @@ export function EnterpriseDashboard({
 }
 
 function ProjectCard({ taskId }: { taskId: string }) {
-  const { data: project } = useQuery({
+  const { data: project, isLoading: projectLoading } = useQuery({
     queryKey: ["task-status", taskId],
     queryFn: async () => {
       const res = await fetch(`/api/tasks/${taskId}/status`);
-      if (!res.ok) return null;
+      if (!res.ok) throw new Error("Failed to load project");
       return res.json() as Promise<TaskProject>;
     },
     refetchInterval: 30_000,
@@ -67,12 +66,29 @@ function ProjectCard({ taskId }: { taskId: string }) {
     },
   });
 
-  if (!project) return null;
+  if (projectLoading) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-zinc-200 p-5 text-sm text-zinc-400 dark:border-zinc-800">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading project...
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="rounded-lg border border-zinc-200 p-5 text-sm text-zinc-400 dark:border-zinc-800">
+        Unable to load project {taskId.slice(0, 8)}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-lg border border-zinc-200 p-5 dark:border-zinc-800">
       <div className="flex items-center justify-between">
-        <h3 className="font-medium">{project.title ?? `Project ${taskId.slice(0, 8)}`}</h3>
+        <h3 className="font-medium">
+          {project.title ?? `Project ${taskId.slice(0, 8)}`}
+        </h3>
         <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
           {project.status}
         </span>
@@ -98,7 +114,8 @@ function ProjectCard({ taskId }: { taskId: string }) {
                 )}
                 <span
                   className={cn(
-                    ms.status === "completed" && "text-zinc-400 line-through"
+                    ms.status === "completed" &&
+                      "text-zinc-400 line-through"
                   )}
                 >
                   {ms.name}
@@ -130,10 +147,15 @@ function DeliverableRow({ deliverable }: { deliverable: Deliverable }) {
 
   const approve = useMutation({
     mutationFn: async () => {
-      await fetch(
+      const res = await fetch(
         `/api/tasks/${deliverable.taskId}/deliverables/${deliverable.id}/approve`,
         { method: "POST" }
       );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to approve");
+      }
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -141,14 +163,32 @@ function DeliverableRow({ deliverable }: { deliverable: Deliverable }) {
       });
       toast.success("Deliverable approved");
     },
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
   });
 
   const requestRevision = useMutation({
     mutationFn: async () => {
-      await fetch(
-        `/api/tasks/${deliverable.taskId}/deliverables/${deliverable.id}/revision`,
-        { method: "POST" }
+      const reason = window.prompt(
+        "What changes are needed?",
+        ""
       );
+      if (!reason) throw new Error("Cancelled");
+
+      const res = await fetch(
+        `/api/tasks/${deliverable.taskId}/deliverables/${deliverable.id}/revision`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to request revision");
+      }
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -156,7 +196,15 @@ function DeliverableRow({ deliverable }: { deliverable: Deliverable }) {
       });
       toast.success("Revision requested");
     },
+    onError: (err: Error) => {
+      if (err.message !== "Cancelled") {
+        toast.error(err.message);
+      }
+    },
   });
+
+  const isPending =
+    approve.isPending || requestRevision.isPending;
 
   const statusBadge: Record<string, string> = {
     pending_review:
@@ -198,15 +246,25 @@ function DeliverableRow({ deliverable }: { deliverable: Deliverable }) {
           <>
             <button
               onClick={() => approve.mutate()}
-              className="rounded px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+              disabled={isPending}
+              className="rounded px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-50 disabled:opacity-50 dark:hover:bg-green-950"
             >
-              Approve
+              {approve.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                "Approve"
+              )}
             </button>
             <button
               onClick={() => requestRevision.mutate()}
-              className="rounded px-2 py-1 text-xs font-medium text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+              disabled={isPending}
+              className="rounded px-2 py-1 text-xs font-medium text-amber-600 hover:bg-amber-50 disabled:opacity-50 dark:hover:bg-amber-950"
             >
-              Request Changes
+              {requestRevision.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                "Request Changes"
+              )}
             </button>
           </>
         )}

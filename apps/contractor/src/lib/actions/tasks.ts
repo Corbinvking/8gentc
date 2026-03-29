@@ -70,8 +70,34 @@ export async function getAvailableTasks(filters?: {
   }
 }
 
+const CONCURRENT_LIMITS: Record<string, number> = {
+  new: 1,
+  established: 2,
+  expert: 3,
+  elite: 5,
+};
+
+export async function getTaskLimits() {
+  const contractor = await requireContractor();
+  const limit = CONCURRENT_LIMITS[contractor.tier ?? "new"] ?? 1;
+  const [activeCount] = await db
+    .select({ value: count() })
+    .from(taskOffers)
+    .where(and(eq(taskOffers.contractorId, contractor.id), eq(taskOffers.status, "accepted")));
+  return { active: activeCount?.value ?? 0, limit, tier: contractor.tier };
+}
+
 export async function acceptTask(offerId: string) {
   const contractor = await requireContractor();
+
+  const limit = CONCURRENT_LIMITS[contractor.tier ?? "new"] ?? 1;
+  const [activeCount] = await db
+    .select({ value: count() })
+    .from(taskOffers)
+    .where(and(eq(taskOffers.contractorId, contractor.id), eq(taskOffers.status, "accepted")));
+  if ((activeCount?.value ?? 0) >= limit) {
+    return { error: `Maximum ${limit} concurrent task${limit > 1 ? "s" : ""} for your tier. Complete a task first.` };
+  }
 
   const [offer] = await db
     .select()

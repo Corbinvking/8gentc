@@ -94,6 +94,54 @@ export function useDeleteNote() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
+      queryClient.invalidateQueries({ queryKey: ["note-links"] });
+      queryClient.invalidateQueries({ queryKey: ["backlinks"] });
+    },
+  });
+}
+
+export function useCreateLink() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      sourceNoteId: string;
+      targetNoteId: string;
+    }) => {
+      const res = await fetch("/api/notes/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to create link");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["note-links"] });
+      queryClient.invalidateQueries({ queryKey: ["backlinks"] });
+    },
+  });
+}
+
+export function useDeleteLink() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      sourceNoteId: string;
+      targetNoteId: string;
+    }) => {
+      const res = await fetch("/api/notes/links", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to delete link");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["note-links"] });
+      queryClient.invalidateQueries({ queryKey: ["backlinks"] });
     },
   });
 }

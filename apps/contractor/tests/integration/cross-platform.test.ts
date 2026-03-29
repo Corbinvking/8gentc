@@ -358,3 +358,183 @@ describe("Service-to-Service Auth", () => {
     expect(headers["Content-Type"]).toBe("application/json");
   });
 });
+
+// -------------------------------------------------------------------------
+// Test 7: Service auth rejection
+// -------------------------------------------------------------------------
+describe("Test 7: Service auth rejection", () => {
+  it("returns 401 when calling /api/contractors/offer without API key", async () => {
+    mockFetch.mockImplementationOnce(() =>
+      makeResponse({ error: "Unauthorized: invalid or missing service API key" }, 401)
+    );
+
+    const res = await mockFetch("/api/contractors/offer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: "task-1", contractorId: "ctr-1" }),
+    });
+
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toContain("Unauthorized");
+  });
+});
+
+// -------------------------------------------------------------------------
+// Test 8: Offer expiration
+// -------------------------------------------------------------------------
+describe("Test 8: Offer expiration", () => {
+  it("rejects acceptance of an offer that has already expired", async () => {
+    const { platformBClient } = await import("@8gent/api-client/platform-b");
+
+    const expiredOffer = {
+      taskId: "task-expired",
+      title: "Expired Task",
+      description: "This should fail",
+      complexity: 2,
+      harnessType: "coding",
+      category: "development",
+      payoutMin: 20,
+      payoutMax: 40,
+      estimatedDuration: 30,
+      expiresAt: new Date(Date.now() - 60_000).toISOString(),
+    };
+
+    mockFetch.mockImplementationOnce(() =>
+      makeResponse({ offerId: "offer-expired" })
+    );
+    const offerResult = await platformBClient.offerTask("ctr-123", expiredOffer as any);
+    expect(offerResult.offerId).toBe("offer-expired");
+
+    mockFetch.mockImplementationOnce(() =>
+      makeResponse({ error: "Task offer has expired" }, 400)
+    );
+
+    const acceptRes = await mockFetch("/api/contractors/offer/offer-expired/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": "test-key" },
+    });
+
+    expect(acceptRes.status).toBe(400);
+    const body = await acceptRes.json();
+    expect(body.error).toContain("expired");
+  });
+});
+
+// -------------------------------------------------------------------------
+// Test 9: Budget limit in harness
+// -------------------------------------------------------------------------
+describe("Test 9: Budget limit in LLM gateway", () => {
+  it("returns budget error when LLM gateway responds 402", async () => {
+    mockFetch.mockImplementationOnce(() =>
+      makeResponse({ error: "Budget limit exceeded for this task" }, 402)
+    );
+
+    const res = await mockFetch("/llm/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId: "task-456",
+        harnessType: "coding",
+        prompt: "Generate code",
+      }),
+    });
+
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.error).toContain("Budget");
+  });
+});
+
+// -------------------------------------------------------------------------
+// Test 10: Multi-task scoring trend
+// -------------------------------------------------------------------------
+describe("Test 10: Multi-task scoring trend", () => {
+  it("fetches scores for multiple tasks and verifies valid range", async () => {
+    const { platformCClient } = await import("@8gent/api-client/platform-c");
+
+    const mockScores = Array.from({ length: 5 }, (_, i) => ({
+      taskId: `task-${i + 1}`,
+      contractorId: "ctr-123",
+      composite: 70 + i * 5,
+      tokenEfficiency: 75 + i * 3,
+      promptQuality: 68 + i * 4,
+      outputQuality: 80 + i * 2,
+      speed: 72 + i * 3,
+      calculatedAt: new Date(Date.now() + i * 86400000).toISOString(),
+    }));
+
+    mockFetch.mockImplementationOnce(() => makeResponse(mockScores));
+
+    const scores = await platformCClient.getContractorScores("ctr-123");
+
+    expect(scores).toHaveLength(5);
+
+    for (const score of scores) {
+      expect(score.composite).toBeGreaterThanOrEqual(0);
+      expect(score.composite).toBeLessThanOrEqual(100);
+      expect(score.tokenEfficiency).toBeGreaterThanOrEqual(0);
+      expect(score.tokenEfficiency).toBeLessThanOrEqual(100);
+      expect(score.outputQuality).toBeGreaterThanOrEqual(0);
+      expect(score.outputQuality).toBeLessThanOrEqual(100);
+      expect(score.speed).toBeGreaterThanOrEqual(0);
+      expect(score.speed).toBeLessThanOrEqual(100);
+    }
+
+    const composites = scores.map((s: any) => s.composite);
+    for (let i = 1; i < composites.length; i++) {
+      expect(composites[i]).toBeGreaterThanOrEqual(composites[i - 1]);
+    }
+  });
+});
+
+// -------------------------------------------------------------------------
+// Test 11: Payout calculation accuracy
+// -------------------------------------------------------------------------
+describe("Test 11: Payout calculation accuracy", () => {
+  it("verifies payout formula matches calculatePayout for known inputs", async () => {
+    const { calculatePayout } = await import("../../src/lib/payout");
+
+    const result1 = calculatePayout({
+      baseRate: 50,
+      compositeScore: 92,
+      tokensUsed: 300,
+      benchmarkTokens: 1000,
+    });
+    expect(result1.performanceMultiplier).toBe(1.3);
+    expect(result1.total).toBe(50 * 1.3 + result1.efficiencyBonus);
+    expect(result1.efficiencyBonus).toBeGreaterThan(0);
+
+    const result2 = calculatePayout({
+      baseRate: 100,
+      compositeScore: 80,
+      tokensUsed: 800,
+      benchmarkTokens: 1000,
+    });
+    expect(result2.performanceMultiplier).toBe(1.1);
+    expect(result2.efficiencyBonus).toBe(0);
+    expect(result2.total).toBe(110);
+
+    const result3 = calculatePayout({
+      baseRate: 25,
+      compositeScore: 55,
+      tokensUsed: 1500,
+      benchmarkTokens: 1000,
+    });
+    expect(result3.performanceMultiplier).toBe(0.9);
+    expect(result3.efficiencyBonus).toBe(0);
+    expect(result3.total).toBe(22.5);
+
+    const result4 = calculatePayout({
+      baseRate: 200,
+      compositeScore: 65,
+      tokensUsed: 200,
+      benchmarkTokens: 1000,
+    });
+    expect(result4.performanceMultiplier).toBe(1.0);
+    expect(result4.efficiencyBonus).toBeGreaterThan(0);
+    const expectedBonus = 200 * ((1000 - 200) / 1000) * 0.1;
+    expect(result4.efficiencyBonus).toBeCloseTo(expectedBonus, 2);
+    expect(result4.total).toBeCloseTo(200 + expectedBonus, 2);
+  });
+});

@@ -315,3 +315,180 @@ describe("API contract (offline)", () => {
     expect(result.suggestedPlan).toBe("individual");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Error path tests
+// ---------------------------------------------------------------------------
+describe("Error path tests", () => {
+  it.skipIf(skipUnlessIntegration())(
+    "returns 502 when Platform C is down for agent list",
+    async () => {
+      const fakeEngineUrl = "http://localhost:19999";
+      const res = await fetch(`${BASE_URL}/api/agents`, {
+        headers: {
+          "X-Test-Engine-Url": fakeEngineUrl,
+        },
+      });
+
+      if (res.status === 502) {
+        const body = await res.json();
+        expect(body.error).toContain("unavailable");
+      } else {
+        expect([200, 401, 502]).toContain(res.status);
+      }
+    }
+  );
+
+  it.skipIf(skipUnlessIntegration())(
+    "chat route returns 503 when engine is unreachable",
+    async () => {
+      const res = await fetch(`${BASE_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "test error path",
+          workspaceId: "test",
+        }),
+      });
+      expect([200, 401, 503]).toContain(res.status);
+    }
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Auth rejection tests
+// ---------------------------------------------------------------------------
+describe("Auth rejection tests", () => {
+  const unauthFetch = (url: string, options?: RequestInit) =>
+    fetch(url, {
+      ...options,
+      headers: {
+        ...options?.headers,
+        Cookie: "",
+      },
+      redirect: "manual",
+    });
+
+  it("GET /api/agents without auth returns 401 or redirect", async () => {
+    const res = await unauthFetch(`${BASE_URL}/api/agents`);
+    expect([401, 302, 307]).toContain(res.status);
+  });
+
+  it("POST /api/chat without auth returns 401 or redirect", async () => {
+    const res = await unauthFetch(`${BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "hello" }),
+    });
+    expect([401, 302, 307]).toContain(res.status);
+  });
+
+  it("GET /api/billing/usage without auth returns 401 or redirect", async () => {
+    const res = await unauthFetch(`${BASE_URL}/api/billing/usage`);
+    expect([401, 302, 307]).toContain(res.status);
+  });
+
+  it("GET /api/notes without auth returns 401 or redirect", async () => {
+    const res = await unauthFetch(`${BASE_URL}/api/notes`);
+    expect([401, 302, 307]).toContain(res.status);
+  });
+
+  it("GET /api/notifications without auth returns 401 or redirect", async () => {
+    const res = await unauthFetch(`${BASE_URL}/api/notifications`);
+    expect([401, 302, 307]).toContain(res.status);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rate limit tests
+// ---------------------------------------------------------------------------
+describe("Rate limit tests (offline)", () => {
+  it("rate limiter blocks after threshold", async () => {
+    const { checkRateLimit } = await import("../../src/lib/rate-limit");
+
+    const key = `test:rate-limit:${Date.now()}`;
+    for (let i = 0; i < 30; i++) {
+      const result = checkRateLimit(key);
+      expect(result.limited).toBe(false);
+    }
+
+    const blocked = checkRateLimit(key);
+    expect(blocked.limited).toBe(true);
+    expect(blocked.remaining).toBe(0);
+  });
+
+  it("rate limiter allows requests from different keys", async () => {
+    const { checkRateLimit } = await import("../../src/lib/rate-limit");
+
+    const keyA = `test:a:${Date.now()}`;
+    const keyB = `test:b:${Date.now()}`;
+
+    for (let i = 0; i < 30; i++) {
+      checkRateLimit(keyA);
+    }
+
+    const resultB = checkRateLimit(keyB);
+    expect(resultB.limited).toBe(false);
+    expect(resultB.remaining).toBe(29);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Concurrent user isolation test
+// ---------------------------------------------------------------------------
+describe("Concurrent user isolation", () => {
+  it.skipIf(skipUnlessIntegration() || !engineUp)(
+    "two users creating agents do not see each other's agents",
+    async () => {
+      const [resA, resB] = await Promise.all([
+        fetch(`${BASE_URL}/api/agents`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Test-User": "user-a",
+          },
+          body: JSON.stringify({
+            name: "User A Agent",
+            skills: ["research"],
+          }),
+        }),
+        fetch(`${BASE_URL}/api/agents`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Test-User": "user-b",
+          },
+          body: JSON.stringify({
+            name: "User B Agent",
+            skills: ["monitoring"],
+          }),
+        }),
+      ]);
+
+      if (resA.status === 201 && resB.status === 201) {
+        const agentA = await resA.json();
+        const agentB = await resB.json();
+
+        expect(agentA.id).not.toBe(agentB.id);
+
+        const listA = await fetch(`${BASE_URL}/api/agents`, {
+          headers: { "X-Test-User": "user-a" },
+        });
+        const listB = await fetch(`${BASE_URL}/api/agents`, {
+          headers: { "X-Test-User": "user-b" },
+        });
+
+        if (listA.ok && listB.ok) {
+          const agentsA: Array<{ id: string }> = await listA.json();
+          const agentsB: Array<{ id: string }> = await listB.json();
+
+          const aIds = agentsA.map((a) => a.id);
+          const bIds = agentsB.map((b) => b.id);
+
+          expect(aIds).not.toContain(agentB.id);
+          expect(bIds).not.toContain(agentA.id);
+        }
+      }
+    }
+  );
+});

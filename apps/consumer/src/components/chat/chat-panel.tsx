@@ -3,7 +3,7 @@
 import { useChatStore } from "@/stores/chat-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Send, Paperclip, Loader2, WifiOff } from "lucide-react";
+import { X, Send, Paperclip, Loader2, WifiOff, RotateCcw } from "lucide-react";
 import { MessageBubble } from "./message-bubble";
 import { CommandPalette } from "./command-palette";
 
@@ -22,6 +22,7 @@ export function ChatPanel() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -81,9 +82,15 @@ export function ChatPanel() {
           message: trimmed,
           noteContext: currentNoteId,
           workspaceId: currentWorkspaceId,
+          threadId,
         }),
         signal: abortRef.current.signal,
       });
+
+      const serverThreadId = res.headers.get("X-Thread-Id");
+      if (serverThreadId && !threadId) {
+        setThreadId(serverThreadId);
+      }
 
       if (!res.ok) {
         if (res.status === 503) {
@@ -164,12 +171,24 @@ export function ChatPanel() {
     <div className="flex w-96 flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex h-14 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800">
         <h2 className="text-sm font-semibold">Chat</h2>
-        <button
-          onClick={() => setOpen(false)}
-          className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => {
+              setThreadId(null);
+              setMessages([]);
+            }}
+            title="New conversation"
+            className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setOpen(false)}
+            className="rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {connectionError && (

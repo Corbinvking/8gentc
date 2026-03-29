@@ -15,6 +15,7 @@ export interface Skill {
   id: string;
   name: string;
   description: string;
+  stub?: boolean;
   execute(context: SkillContext): Promise<SkillResult>;
 }
 
@@ -59,15 +60,48 @@ export class SkillRegistry {
   }
 }
 
+const LLM_GATEWAY_URL = process.env.LLM_GATEWAY_URL ?? "http://localhost:3002";
+
+async function callGateway(
+  prompt: string,
+  systemPrompt: string,
+  userId: string
+): Promise<{ response: string; inputTokens: number; outputTokens: number }> {
+  const res = await fetch(`${LLM_GATEWAY_URL}/llm/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt,
+      systemPrompt,
+      userId,
+      taskType: "simple",
+      maxTokens: 2048,
+      temperature: 0.3,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`LLM Gateway error: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return {
+    response: (data as any).response,
+    inputTokens: (data as any).inputTokens ?? 0,
+    outputTokens: (data as any).outputTokens ?? 0,
+  };
+}
+
 export const builtInSkills: Skill[] = [
   {
     id: "web-search",
     name: "Web Search",
-    description: "Search the web for information",
+    description: "Search the web for information (stub — requires external search API integration)",
+    stub: true,
     async execute(ctx) {
       return {
-        success: true,
-        output: { query: ctx.input, results: [] },
+        success: false,
+        output: { query: ctx.input, results: [], message: "Web search requires external API integration (e.g. Serper, SerpAPI). Not yet connected." },
         tokensUsed: 0,
       };
     },
@@ -75,11 +109,12 @@ export const builtInSkills: Skill[] = [
   {
     id: "code-execution",
     name: "Code Execution",
-    description: "Execute code in a sandboxed environment",
+    description: "Execute code in a sandboxed environment (stub — requires sandbox environment)",
+    stub: true,
     async execute(ctx) {
       return {
-        success: true,
-        output: { code: ctx.input, result: null },
+        success: false,
+        output: { code: ctx.input, result: null, message: "Code execution requires a sandbox environment. Not yet connected." },
         tokensUsed: 0,
       };
     },
@@ -87,11 +122,12 @@ export const builtInSkills: Skill[] = [
   {
     id: "file-read",
     name: "File Read",
-    description: "Read files from the agent's workspace",
+    description: "Read files from the agent's workspace (stub — requires agent workspace filesystem)",
+    stub: true,
     async execute(ctx) {
       return {
-        success: true,
-        output: { path: ctx.input, content: "" },
+        success: false,
+        output: { path: ctx.input, content: "", message: "File read requires agent workspace filesystem. Not yet connected." },
         tokensUsed: 0,
       };
     },
@@ -99,13 +135,34 @@ export const builtInSkills: Skill[] = [
   {
     id: "summarize",
     name: "Summarize",
-    description: "Summarize long text content",
+    description: "Summarize long text content using the LLM gateway",
+    stub: false,
     async execute(ctx) {
-      return {
-        success: true,
-        output: { input: ctx.input, summary: "" },
-        tokensUsed: 0,
-      };
+      const text = typeof ctx.input === "string" ? ctx.input : JSON.stringify(ctx.input);
+
+      if (!text || text.length < 10) {
+        return { success: false, output: { message: "Input text too short to summarize" }, tokensUsed: 0 };
+      }
+
+      try {
+        const result = await callGateway(
+          text,
+          "You are a summarization expert. Produce a clear, concise summary of the provided text. Preserve all key facts, numbers, and conclusions. Output only the summary, nothing else.",
+          ctx.userId
+        );
+
+        return {
+          success: true,
+          output: { summary: result.response },
+          tokensUsed: result.inputTokens + result.outputTokens,
+        };
+      } catch (err) {
+        return {
+          success: false,
+          output: { message: (err as Error).message },
+          tokensUsed: 0,
+        };
+      }
     },
   },
 ];

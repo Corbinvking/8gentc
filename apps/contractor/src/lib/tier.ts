@@ -100,7 +100,7 @@ export function getXpForTask(compositeScore: number, tier: ContractorTier): numb
   const tierMultiplier = TIER_ORDER.indexOf(tier) + 1;
   const scoreBonus = compositeScore >= 90 ? 50 : compositeScore >= 75 ? 25 : compositeScore >= 60 ? 10 : 0;
 
-  return baseXp * tierMultiplier + scoreBonus;
+  return Math.max(0, baseXp * tierMultiplier + scoreBonus);
 }
 
 export function getStreakBonus(streakLength: number): number {

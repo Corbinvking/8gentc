@@ -41,6 +41,26 @@ describe("SkillRegistry", () => {
   });
 
   it("executes a skill", async () => {
+    registry.register({
+      id: "test-skill",
+      name: "Test Skill",
+      description: "A test skill",
+      async execute() {
+        return { success: true, output: "executed", tokensUsed: 0 };
+      },
+    });
+
+    const result = await registry.execute("test-skill", {
+      agentId: "a1",
+      userId: "u1",
+      input: "test query",
+      config: {},
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("stub skills return success: false with explanation", async () => {
     for (const skill of builtInSkills) {
       registry.register(skill);
     }
@@ -52,7 +72,8 @@ describe("SkillRegistry", () => {
       config: {},
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+    expect((result.output as any).message).toContain("requires");
   });
 
   it("returns failure for unknown skill", async () => {

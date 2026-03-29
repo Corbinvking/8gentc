@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { submitDispute } from "@/lib/actions/disputes";
+import { useState, useEffect } from "react";
+import { submitDispute, getMyDisputes } from "@/lib/actions/disputes";
+import { getPayoutAccountStatus } from "@/lib/actions/stripe";
 import { toast } from "sonner";
-import { DollarSign, TrendingUp, Clock, AlertTriangle, FileText } from "lucide-react";
+import { DollarSign, TrendingUp, Clock, AlertTriangle, FileText, CreditCard, CheckCircle, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 interface EarningsData {
   currentPeriod: number;
@@ -21,6 +23,18 @@ interface PayoutHistory {
   periodStart: string;
   periodEnd: string;
   processedAt?: string;
+}
+
+interface DisputeRecord {
+  id: string;
+  reason: string;
+  status: string;
+  resolution: string | null;
+  adminNotes: string | null;
+  createdAt: Date;
+  resolvedAt: Date | null;
+  payoutId: string | null;
+  taskId: string | null;
 }
 
 const MOCK_EARNINGS: EarningsData = {
@@ -42,7 +56,20 @@ export default function EarningsPage() {
   const [showDispute, setShowDispute] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeTaskId, setDisputeTaskId] = useState("");
+  const [disputePayoutId, setDisputePayoutId] = useState("");
   const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [hasStripeAccount, setHasStripeAccount] = useState<boolean | null>(null);
+  const [disputes, setDisputes] = useState<DisputeRecord[]>([]);
+
+  useEffect(() => {
+    getPayoutAccountStatus()
+      .then((r) => setHasStripeAccount(r.status === "active"))
+      .catch(() => setHasStripeAccount(false));
+
+    getMyDisputes()
+      .then((d) => setDisputes(d as unknown as DisputeRecord[]))
+      .catch(() => {});
+  }, []);
 
   async function handleSubmitDispute() {
     if (!disputeReason.trim()) {
@@ -51,11 +78,18 @@ export default function EarningsPage() {
     }
     setSubmittingDispute(true);
     try {
-      await submitDispute({ taskId: disputeTaskId || undefined, reason: disputeReason });
+      await submitDispute({
+        taskId: disputeTaskId || undefined,
+        payoutId: disputePayoutId || undefined,
+        reason: disputeReason,
+      });
       toast.success("Dispute submitted");
       setShowDispute(false);
       setDisputeReason("");
       setDisputeTaskId("");
+      setDisputePayoutId("");
+      const updated = await getMyDisputes();
+      setDisputes(updated as unknown as DisputeRecord[]);
     } catch {
       toast.error("Failed to submit dispute");
     } finally {
@@ -82,6 +116,25 @@ export default function EarningsPage() {
           Dispute
         </button>
       </div>
+
+      {/* Stripe Connect banner */}
+      {hasStripeAccount === false && (
+        <div className="flex items-center justify-between rounded-xl border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/5 p-4">
+          <div className="flex items-center gap-3">
+            <CreditCard className="h-5 w-5 text-[var(--color-warning)]" />
+            <div>
+              <p className="text-sm font-medium">Set up your payout account to receive earnings</p>
+              <p className="text-xs text-[var(--color-muted-foreground)]">Connect your Stripe account to start getting paid for completed tasks.</p>
+            </div>
+          </div>
+          <Link
+            href="/settings/payments"
+            className="flex items-center gap-1 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)]"
+          >
+            <ExternalLink className="h-4 w-4" /> Set Up Payouts
+          </Link>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
@@ -149,6 +202,21 @@ export default function EarningsPage() {
           </h3>
           <div className="space-y-3">
             <div>
+              <label className="mb-1 block text-sm font-medium">Payout Period</label>
+              <select
+                value={disputePayoutId}
+                onChange={(e) => setDisputePayoutId(e.target.value)}
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-2 text-sm"
+              >
+                <option value="">Select a payout (optional)</option>
+                {MOCK_HISTORY.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {new Date(p.periodStart).toLocaleDateString()} – {new Date(p.periodEnd).toLocaleDateString()} (${p.amount.toFixed(2)})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="mb-1 block text-sm font-medium">Task ID (optional)</label>
               <input
                 type="text"
@@ -184,6 +252,49 @@ export default function EarningsPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Resolved disputes */}
+      {disputes.length > 0 && (
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+          <div className="border-b border-[var(--color-border)] px-6 py-4">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <AlertTriangle className="h-4 w-4" /> My Disputes
+            </h2>
+          </div>
+          {disputes.map((d) => (
+            <div key={d.id} className="border-b border-[var(--color-border)] px-6 py-4 last:border-0">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-sm">{d.reason}</p>
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    Filed {new Date(d.createdAt).toLocaleDateString()}
+                    {d.taskId && ` · Task: ${d.taskId}`}
+                    {d.payoutId && ` · Payout: ${d.payoutId}`}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
+                  d.status === "resolved" ? "bg-[var(--color-success)]/10 text-[var(--color-success)]"
+                    : d.status === "rejected" ? "bg-[var(--color-destructive)]/10 text-[var(--color-destructive)]"
+                    : "bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
+                }`}>
+                  {d.status}
+                </span>
+              </div>
+              {d.resolution && (
+                <div className="mt-2 rounded-lg bg-[var(--color-muted)] p-3">
+                  <p className="text-xs font-medium">Resolution</p>
+                  <p className="mt-1 text-sm">{d.resolution}</p>
+                  {d.resolvedAt && (
+                    <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                      Resolved {new Date(d.resolvedAt).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

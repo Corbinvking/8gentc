@@ -26,12 +26,13 @@ export async function GET(req: Request) {
       );
     }
 
+    const limit = search ? 50 : 200;
     const results = await db
       .select()
       .from(notes)
       .where(and(...conditions))
       .orderBy(desc(notes.updatedAt))
-      .limit(200);
+      .limit(limit);
 
     return NextResponse.json(results);
   }
@@ -46,12 +47,13 @@ export async function GET(req: Request) {
     );
   }
 
+  const limit = search ? 50 : 200;
   const results = await db
     .select()
     .from(notes)
     .where(and(...conditions))
     .orderBy(desc(notes.updatedAt))
-    .limit(200);
+    .limit(limit);
 
   return NextResponse.json(results);
 }

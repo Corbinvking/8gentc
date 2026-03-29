@@ -1,27 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Trophy, Medal, Award, Crown } from "lucide-react";
-
-interface LeaderboardEntry {
-  rank: number;
-  name: string;
-  score: number;
-  tasksCompleted: number;
-  tier: string;
-  isCurrentUser: boolean;
-}
-
-const MOCK_LEADERBOARD: LeaderboardEntry[] = [
-  { rank: 1, name: "Alex K.", score: 94.5, tasksCompleted: 87, tier: "expert", isCurrentUser: false },
-  { rank: 2, name: "Sam R.", score: 91.2, tasksCompleted: 62, tier: "expert", isCurrentUser: false },
-  { rank: 3, name: "Jordan M.", score: 88.7, tasksCompleted: 54, tier: "established", isCurrentUser: false },
-  { rank: 4, name: "Taylor P.", score: 85.3, tasksCompleted: 41, tier: "established", isCurrentUser: true },
-  { rank: 5, name: "Casey W.", score: 82.1, tasksCompleted: 38, tier: "established", isCurrentUser: false },
-  { rank: 6, name: "Morgan L.", score: 79.4, tasksCompleted: 29, tier: "new", isCurrentUser: false },
-  { rank: 7, name: "Riley S.", score: 76.8, tasksCompleted: 23, tier: "new", isCurrentUser: false },
-  { rank: 8, name: "Quinn D.", score: 74.2, tasksCompleted: 19, tier: "new", isCurrentUser: false },
-];
+import { useState, useEffect } from "react";
+import { getLeaderboard, type LeaderboardEntry } from "@/lib/actions/leaderboard";
+import { Trophy, Medal, Award, Crown, Loader2 } from "lucide-react";
 
 const RANK_ICONS = [Crown, Medal, Award];
 
@@ -34,7 +15,19 @@ const TIER_COLORS: Record<string, string> = {
 
 export default function LeaderboardPage() {
   const [period, setPeriod] = useState<"weekly" | "monthly" | "all_time">("weekly");
-  const [scope, setScope] = useState<"tier" | "global">("tier");
+  const [scope, setScope] = useState<"tier" | "global">("global");
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getLeaderboard()
+      .then(setEntries)
+      .catch(() => setEntries([]))
+      .finally(() => setLoading(false));
+  }, [period, scope]);
+
+  const topThree = entries.slice(0, 3);
 
   return (
     <div className="space-y-6">
@@ -75,69 +68,82 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {MOCK_LEADERBOARD.slice(0, 3).map((entry, i) => {
-          const Icon = RANK_ICONS[i] ?? Trophy;
-          const colors = ["from-amber-400 to-amber-600", "from-gray-300 to-gray-500", "from-orange-400 to-orange-600"];
-          return (
-            <div
-              key={entry.rank}
-              className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 text-center ${
-                entry.isCurrentUser ? "ring-2 ring-[var(--color-primary)]" : ""
-              }`}
-            >
-              <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${colors[i]} text-white`}>
-                <Icon className="h-6 w-6" />
-              </div>
-              <p className="font-bold">{entry.name}</p>
-              <p className="text-2xl font-bold text-[var(--color-primary)]">{entry.score}</p>
-              <p className="text-xs text-[var(--color-muted-foreground)]">
-                {entry.tasksCompleted} tasks completed
-              </p>
-              <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${TIER_COLORS[entry.tier] ?? ""}`}>
-                {entry.tier}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
-        <div className="border-b border-[var(--color-border)] px-6 py-3">
-          <div className="grid grid-cols-12 text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
-            <span className="col-span-1">Rank</span>
-            <span className="col-span-4">Contractor</span>
-            <span className="col-span-2">Tier</span>
-            <span className="col-span-2 text-right">Score</span>
-            <span className="col-span-3 text-right">Tasks</span>
-          </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--color-muted-foreground)]" />
         </div>
-        {MOCK_LEADERBOARD.map((entry) => (
-          <div
-            key={entry.rank}
-            className={`grid grid-cols-12 items-center border-b border-[var(--color-border)] px-6 py-3 last:border-0 ${
-              entry.isCurrentUser ? "bg-[var(--color-primary)]/5" : ""
-            }`}
-          >
-            <span className="col-span-1 text-sm font-bold">#{entry.rank}</span>
-            <span className="col-span-4 text-sm font-medium">
-              {entry.name}
-              {entry.isCurrentUser && (
-                <span className="ml-2 text-xs text-[var(--color-primary)]">(You)</span>
-              )}
-            </span>
-            <span className="col-span-2">
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${TIER_COLORS[entry.tier] ?? ""}`}>
-                {entry.tier}
-              </span>
-            </span>
-            <span className="col-span-2 text-right text-sm font-semibold">{entry.score}</span>
-            <span className="col-span-3 text-right text-sm text-[var(--color-muted-foreground)]">
-              {entry.tasksCompleted}
-            </span>
+      ) : entries.length === 0 ? (
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-12 text-center">
+          <Trophy className="mx-auto h-8 w-8 text-[var(--color-muted-foreground)]" />
+          <p className="mt-3 text-sm text-[var(--color-muted-foreground)]">No contractors ranked yet. Complete tasks to appear on the leaderboard!</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {topThree.map((entry, i) => {
+              const Icon = RANK_ICONS[i] ?? Trophy;
+              const colors = ["from-amber-400 to-amber-600", "from-gray-300 to-gray-500", "from-orange-400 to-orange-600"];
+              return (
+                <div
+                  key={entry.contractorId}
+                  className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 text-center ${
+                    entry.isCurrentUser ? "ring-2 ring-[var(--color-primary)]" : ""
+                  }`}
+                >
+                  <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${colors[i]} text-white`}>
+                    <Icon className="h-6 w-6" />
+                  </div>
+                  <p className="font-bold">{entry.displayName}</p>
+                  <p className="text-2xl font-bold text-[var(--color-primary)]">{entry.compositeScore.toFixed(1)}</p>
+                  <p className="text-xs text-[var(--color-muted-foreground)]">
+                    {entry.completedTasks} tasks · {entry.xp.toLocaleString()} XP
+                  </p>
+                  <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${TIER_COLORS[entry.tier] ?? ""}`}>
+                    {entry.tier}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+            <div className="border-b border-[var(--color-border)] px-6 py-3">
+              <div className="grid grid-cols-12 text-xs font-medium text-[var(--color-muted-foreground)] uppercase">
+                <span className="col-span-1">Rank</span>
+                <span className="col-span-3">Contractor</span>
+                <span className="col-span-2">Tier</span>
+                <span className="col-span-2 text-right">Score</span>
+                <span className="col-span-2 text-right">XP</span>
+                <span className="col-span-2 text-right">Tasks</span>
+              </div>
+            </div>
+            {entries.map((entry) => (
+              <div
+                key={entry.contractorId}
+                className={`grid grid-cols-12 items-center border-b border-[var(--color-border)] px-6 py-3 last:border-0 ${
+                  entry.isCurrentUser ? "bg-[var(--color-primary)]/5" : ""
+                }`}
+              >
+                <span className="col-span-1 text-sm font-bold">#{entry.rank}</span>
+                <span className="col-span-3 text-sm font-medium">
+                  {entry.displayName}
+                  {entry.isCurrentUser && (
+                    <span className="ml-2 text-xs text-[var(--color-primary)]">(You)</span>
+                  )}
+                </span>
+                <span className="col-span-2">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${TIER_COLORS[entry.tier] ?? ""}`}>
+                    {entry.tier}
+                  </span>
+                </span>
+                <span className="col-span-2 text-right text-sm font-semibold">{entry.compositeScore.toFixed(1)}</span>
+                <span className="col-span-2 text-right text-sm text-[var(--color-muted-foreground)]">{entry.xp.toLocaleString()}</span>
+                <span className="col-span-2 text-right text-sm text-[var(--color-muted-foreground)]">{entry.completedTasks}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

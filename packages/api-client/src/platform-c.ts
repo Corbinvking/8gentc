@@ -92,12 +92,19 @@ function streamRequest(
 // Consumer-facing types (Platform A)
 // ---------------------------------------------------------------------------
 
+export interface ChatHistoryMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
 export interface ChatMessagePayload {
   message: string;
   userId: string;
   workspaceId: string;
+  threadId?: string;
   noteContextId?: string;
   attachments?: string[];
+  history?: ChatHistoryMessage[];
 }
 
 export interface CreateAgentPayload {
@@ -337,6 +344,25 @@ export const platformCClient = {
         method: "POST",
         body: JSON.stringify(payload),
       });
+    },
+    approveDeliverable(taskId: string, deliverableId: string) {
+      return request<DeliverableResponse>(
+        `/tasks/${taskId}/deliverables/${deliverableId}/approve`,
+        { method: "POST" }
+      );
+    },
+    requestRevision(
+      taskId: string,
+      deliverableId: string,
+      reason: string
+    ) {
+      return request<DeliverableResponse>(
+        `/tasks/${taskId}/deliverables/${deliverableId}/revision`,
+        {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        }
+      );
     },
   },
 

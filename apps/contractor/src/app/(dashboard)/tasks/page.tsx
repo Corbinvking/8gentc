@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getAvailableTasks, getActiveTasks, acceptTask, rejectTask } from "@/lib/actions/tasks";
+import { getAvailableTasks, getActiveTasks, acceptTask, rejectTask, getTaskLimits } from "@/lib/actions/tasks";
 import { toast } from "sonner";
-import { ListTodo, Clock, DollarSign, Zap, Code, FileText, Search, Filter, AlertCircle, RotateCcw } from "lucide-react";
+import { ListTodo, Clock, DollarSign, Zap, Code, FileText, Search, Filter, AlertCircle, RotateCcw, Info } from "lucide-react";
 import Link from "next/link";
 
 const HARNESS_ICONS: Record<string, typeof Code> = {
@@ -22,9 +22,11 @@ export default function TasksPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [taskLimits, setTaskLimits] = useState<{ active: number; limit: number; tier: string } | null>(null);
 
   useEffect(() => {
     loadTasks();
+    getTaskLimits().then(setTaskLimits).catch(() => {});
   }, [tab, categoryFilter]);
 
   async function loadTasks() {
@@ -52,6 +54,7 @@ export default function TasksPage() {
       toast.error(result.error);
     } else {
       toast.success("Task accepted!");
+      getTaskLimits().then(setTaskLimits).catch(() => {});
       loadTasks();
     }
   }
@@ -68,13 +71,30 @@ export default function TasksPage() {
     }
   }
 
+  const atCapacity = taskLimits !== null && taskLimits.active >= taskLimits.limit;
+
   const needsRevisionTasks = activeTasks.filter((t: any) => t.needsRevision);
   const otherActiveTasks = activeTasks.filter((t: any) => !t.needsRevision);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Tasks</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Tasks</h1>
+          {taskLimits && (
+            <span
+              className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${
+                atCapacity
+                  ? "bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
+                  : "bg-[var(--color-muted)] text-[var(--color-muted-foreground)]"
+              }`}
+              title={atCapacity ? `Maximum ${taskLimits.limit} concurrent task${taskLimits.limit > 1 ? "s" : ""} for ${taskLimits.tier} tier` : undefined}
+            >
+              {taskLimits.active}/{taskLimits.limit} active
+              {atCapacity && <Info className="h-3 w-3" />}
+            </span>
+          )}
+        </div>
         <div className="flex rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
           <button
             onClick={() => setTab("available")}
@@ -105,7 +125,7 @@ export default function TasksPage() {
       </div>
 
       {tab === "available" && (
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -117,6 +137,12 @@ export default function TasksPage() {
             <option value="research">Research</option>
             <option value="consulting">Consulting</option>
           </select>
+          {atCapacity && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-[var(--color-warning)]/10 px-3 py-2 text-xs text-[var(--color-warning)]">
+              <AlertCircle className="h-3.5 w-3.5" />
+              At task capacity ({taskLimits!.limit} max for {taskLimits!.tier} tier). Complete a task to accept more.
+            </div>
+          )}
         </div>
       )}
 
@@ -188,7 +214,9 @@ export default function TasksPage() {
                         </button>
                         <button
                           onClick={() => handleAccept(task.id)}
-                          className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)]"
+                          disabled={atCapacity}
+                          title={atCapacity ? `At capacity (${taskLimits!.limit} max for ${taskLimits!.tier} tier)` : undefined}
+                          className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-foreground)] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Accept
                         </button>
