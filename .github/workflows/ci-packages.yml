@@ -1,0 +1,27 @@
+name: CI — Shared Packages
+
+on:
+  pull_request:
+    paths:
+      - "packages/**"
+
+concurrency:
+  group: ci-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test Packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck --filter="./packages/*"
+      - run: pnpm run lint --filter="./packages/*"

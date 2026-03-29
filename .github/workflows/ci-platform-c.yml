@@ -1,0 +1,34 @@
+name: CI — Platform C (Engine)
+
+on:
+  pull_request:
+    paths:
+      - "services/**"
+      - "packages/shared/**"
+      - "packages/db/**"
+      - "packages/8gentc/**"
+      - "packages/swarm/**"
+      - "packages/api-client/**"
+
+concurrency:
+  group: ci-platform-c-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck --filter=@8gent/engine... --filter=@8gent/llm-gateway... --filter=@8gent/agent-host...
+      - run: pnpm run lint --filter=@8gent/engine... --filter=@8gent/llm-gateway... --filter=@8gent/agent-host...
+      - run: pnpm run build --filter=@8gent/engine... --filter=@8gent/llm-gateway... --filter=@8gent/agent-host...
+      - run: pnpm run test --filter=@8gent/engine... --filter=@8gent/llm-gateway... --filter=@8gent/agent-host...

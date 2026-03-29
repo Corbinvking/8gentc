@@ -1,0 +1,26 @@
+# Platform A — Team A owns consumer app
+apps/consumer/                    @8gent/team-a
+
+# Platform B — Team B owns contractor app
+apps/contractor/                  @8gent/team-b
+
+# Platform C — Team C owns engine services + admin
+apps/admin/                       @8gent/team-c
+services/                         @8gent/team-c
+packages/8gentc/                  @8gent/team-c
+packages/swarm/                   @8gent/team-c
+
+# Shared packages — ALL teams must review
+packages/shared/                  @8gent/team-a @8gent/team-b @8gent/team-c
+packages/db/                      @8gent/team-a @8gent/team-b @8gent/team-c
+packages/api-client/              @8gent/team-a @8gent/team-b @8gent/team-c
+
+# UI library — Team A primary, others can contribute
+packages/ui/                      @8gent/team-a
+
+# Infrastructure — Team C owns
+docker/                           @8gent/team-c
+.github/                          @8gent/team-c
+
+# Specs — all teams
+specs/                            @8gent/team-a @8gent/team-b @8gent/team-c

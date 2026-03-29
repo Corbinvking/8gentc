@@ -1,0 +1,28 @@
+{
+  "name": "@8gent/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@8gent/shared": "workspace:*",
+    "@8gent/db": "workspace:*",
+    "@8gent/8gentc": "workspace:*",
+    "@8gent/swarm": "workspace:*",
+    "fastify": "^5",
+    "@fastify/cors": "^10",
+    "@fastify/websocket": "^11"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
