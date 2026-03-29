@@ -13,12 +13,21 @@
   },
   "dependencies": {
     "@8gent/shared": "workspace:*",
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@fastify/cors": "^10",
+    "@google/generative-ai": "^0.24.1",
+    "drizzle-orm": "^0.36",
     "fastify": "^5",
-    "@fastify/cors": "^10"
+    "ioredis": "^5.10.1",
+    "nanoid": "^5.1.7",
+    "openai": "^6.33.0",
+    "postgres": "^3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20",
     "tsx": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3"
   }
 }

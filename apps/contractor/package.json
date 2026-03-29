@@ -7,23 +7,41 @@
     "build": "next build",
     "start": "next start --port 3010",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@8gent/api-client": "workspace:*",
+    "@8gent/db": "workspace:*",
     "@8gent/shared": "workspace:*",
     "@8gent/ui": "workspace:*",
-    "@8gent/db": "workspace:*",
-    "@8gent/api-client": "workspace:*",
+    "@clerk/nextjs": "^6",
+    "@monaco-editor/react": "^4.7.0",
+    "@stripe/stripe-js": "^5",
+    "date-fns": "^4",
+    "date-fns-tz": "^3.2.0",
+    "lucide-react": "^0.468",
+    "nanoid": "^5.1.7",
     "next": "^15",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "recharts": "^2",
+    "resend": "^6.9.4",
+    "sonner": "^2",
+    "stripe": "^17",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^5",
     "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4"
+    "typescript": "^5",
+    "vitest": "^3"
   }
 }

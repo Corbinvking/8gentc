@@ -19,6 +19,8 @@
     "@8gent/shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5"
+    "@types/ws": "^8.18.1",
+    "typescript": "^5",
+    "vitest": "^3"
   }
 }

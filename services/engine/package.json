@@ -12,17 +12,26 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@8gent/shared": "workspace:*",
-    "@8gent/db": "workspace:*",
     "@8gent/8gentc": "workspace:*",
+    "@8gent/db": "workspace:*",
+    "@8gent/shared": "workspace:*",
     "@8gent/swarm": "workspace:*",
-    "fastify": "^5",
     "@fastify/cors": "^10",
-    "@fastify/websocket": "^11"
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/websocket": "^11",
+    "bullmq": "^5.71.1",
+    "drizzle-orm": "^0.36",
+    "fastify": "^5",
+    "ioredis": "^5.10.1",
+    "nanoid": "^5.1.7",
+    "postgres": "^3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20",
     "tsx": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3"
   }
 }

@@ -6,6 +6,7 @@ export const telemetryEvents = pgTable("telemetry_events", {
   agentId: text("agent_id"),
   userId: text("user_id"),
   taskId: text("task_id"),
+  contractorId: text("contractor_id"),
   payload: jsonb("payload").$type<Record<string, unknown>>().default({}),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });

@@ -7,23 +7,48 @@
     "build": "next build",
     "start": "next start --port 3000",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@8gent/shared": "workspace:*",
     "@8gent/ui": "workspace:*",
     "@8gent/db": "workspace:*",
     "@8gent/api-client": "workspace:*",
+    "@clerk/nextjs": "^6",
+    "@stripe/stripe-js": "^5",
+    "@tanstack/react-query": "^5",
+    "@tiptap/extension-link": "^2",
+    "@tiptap/extension-placeholder": "^2",
+    "@tiptap/extension-task-item": "^2",
+    "@tiptap/extension-task-list": "^2",
+    "@tiptap/react": "^2",
+    "@tiptap/starter-kit": "^2",
+    "@xyflow/react": "^12",
+    "ai": "^4",
+    "clsx": "^2",
+    "date-fns": "^4",
+    "lucide-react": "^0.468",
     "next": "^15",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "recharts": "^2",
+    "sonner": "^2",
+    "stripe": "^17",
+    "svix": "^1",
+    "tailwind-merge": "^2",
+    "zustand": "^5"
   },
   "devDependencies": {
+    "@playwright/test": "^1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "msw": "^2",
     "typescript": "^5",
     "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4"
+    "@tailwindcss/postcss": "^4",
+    "vitest": "^3"
   }
 }

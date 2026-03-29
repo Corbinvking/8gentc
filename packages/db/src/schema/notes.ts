@@ -6,6 +6,10 @@ export const notes = pgTable("notes", {
   id: text("id").primaryKey(),
   title: varchar("title", { length: 500 }).notNull(),
   content: text("content"),
+  type: varchar("type", { length: 50 })
+    .notNull()
+    .default("thought")
+    .$type<"thought" | "goal" | "intention" | "reference" | "agent-output">(),
   workspaceId: text("workspace_id")
     .notNull()
     .references(() => workspaces.id),
