@@ -1,9 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@8gent/db/client";
 import { shifts, contractorAvailability } from "@8gent/db/schema";
 import { gte, eq, and } from "drizzle-orm";
+import { validateServiceAuth } from "@/lib/s2s-auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = validateServiceAuth(req);
+  if (authError) return authError;
+
   const now = new Date();
 
   const upcomingShifts = await db

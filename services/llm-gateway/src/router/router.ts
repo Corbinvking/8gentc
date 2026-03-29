@@ -8,6 +8,8 @@ export interface RouteDecision {
   fallbackChain: Array<{ provider: string; model: string }>;
 }
 
+const RETRY_DELAYS = [500, 1000, 2000];
+
 export class LLMRouter {
   private providers = new Map<string, LLMProviderAdapter>();
   private providerPriority: string[] = ["anthropic", "openai", "google"];
@@ -56,18 +58,67 @@ export class LLMRouter {
       const adapter = this.providers.get(attempt.provider);
       if (!adapter) continue;
 
+      for (let retry = 0; retry <= 2; retry++) {
+        try {
+          const response = await adapter.complete({
+            ...request,
+            model: attempt.model,
+          });
+          return { response, provider: attempt.provider, tier: decision.tier };
+        } catch (err) {
+          lastError = err as Error;
+          if (retry < 2) {
+            await new Promise((r) =>
+              setTimeout(r, RETRY_DELAYS[retry] + Math.random() * 200)
+            );
+          }
+        }
+      }
+    }
+
+    throw lastError ?? new Error("No providers available");
+  }
+
+  async *executeStream(
+    request: LLMRequest,
+    taskType?: string,
+    contextLength?: number
+  ): AsyncGenerator<string, { response: LLMResponse; provider: string; tier: ComplexityTier }> {
+    const decision = this.route(request.prompt, taskType, contextLength);
+
+    const attempts = [
+      { provider: decision.provider, model: decision.model },
+      ...decision.fallbackChain,
+    ];
+
+    let lastError: Error | null = null;
+
+    for (const attempt of attempts) {
+      const adapter = this.providers.get(attempt.provider);
+      if (!adapter || !adapter.stream) continue;
+
       try {
-        const response = await adapter.complete({
-          ...request,
-          model: attempt.model,
-        });
-        return { response, provider: attempt.provider, tier: decision.tier };
+        const gen = adapter.stream({ ...request, model: attempt.model });
+        let result: IteratorResult<string, LLMResponse>;
+
+        do {
+          result = await gen.next();
+          if (!result.done && typeof result.value === "string") {
+            yield result.value;
+          }
+        } while (!result.done);
+
+        return {
+          response: result.value,
+          provider: attempt.provider,
+          tier: decision.tier,
+        };
       } catch (err) {
         lastError = err as Error;
       }
     }
 
-    throw lastError ?? new Error("No providers available");
+    throw lastError ?? new Error("No providers with streaming support available");
   }
 
   getProvider(name: string): LLMProviderAdapter | undefined {

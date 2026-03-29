@@ -1,11 +1,52 @@
 "use server";
 
 import { db } from "@8gent/db/client";
-import { taskOffers, deliverables } from "@8gent/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { taskOffers, deliverables, contractors } from "@8gent/db/schema";
+import { eq, and, desc, lt, count, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { requireContractor } from "@/lib/auth";
 import { platformCClient } from "@8gent/api-client/platform-c";
+
+async function expireStaleOffers(contractorId: string) {
+  const now = new Date();
+  await db
+    .update(taskOffers)
+    .set({ status: "expired", respondedAt: now })
+    .where(
+      and(
+        eq(taskOffers.contractorId, contractorId),
+        eq(taskOffers.status, "pending"),
+        lt(taskOffers.expiresAt, now)
+      )
+    );
+}
+
+async function updateAcceptanceRate(contractorId: string) {
+  const [total] = await db
+    .select({ value: count() })
+    .from(taskOffers)
+    .where(
+      and(
+        eq(taskOffers.contractorId, contractorId),
+        sql`${taskOffers.status} IN ('accepted', 'rejected', 'expired')`
+      )
+    );
+
+  const [accepted] = await db
+    .select({ value: count() })
+    .from(taskOffers)
+    .where(and(eq(taskOffers.contractorId, contractorId), eq(taskOffers.status, "accepted")));
+
+  const rate =
+    (total?.value ?? 0) > 0
+      ? ((accepted?.value ?? 0) / (total?.value ?? 1)) * 100
+      : 100;
+
+  await db
+    .update(contractors)
+    .set({ acceptanceRate: String(Math.round(rate * 100) / 100), updatedAt: new Date() })
+    .where(eq(contractors.id, contractorId));
+}
 
 export async function getAvailableTasks(filters?: {
   category?: string;
@@ -13,6 +54,8 @@ export async function getAvailableTasks(filters?: {
   sortBy?: "payout" | "deadline" | "match_score";
 }) {
   const contractor = await requireContractor();
+
+  await expireStaleOffers(contractor.id);
 
   try {
     const tasks = await platformCClient.getAvailableTasks(contractor.id, filters);
@@ -38,18 +81,28 @@ export async function acceptTask(offerId: string) {
 
   if (!offer) return { error: "Task offer not found" };
   if (offer.status !== "pending") return { error: "Task offer already responded to" };
-  if (new Date() > offer.expiresAt) return { error: "Task offer has expired" };
+
+  if (new Date() > offer.expiresAt) {
+    await db
+      .update(taskOffers)
+      .set({ status: "expired", respondedAt: new Date() })
+      .where(eq(taskOffers.id, offerId));
+    await updateAcceptanceRate(contractor.id);
+    return { error: "Task offer has expired" };
+  }
 
   try {
     await platformCClient.acceptTask(offer.taskId, contractor.id);
   } catch {
-    // Platform C may not be available -- proceed with local state
+    // Platform C may not be available — proceed with local state
   }
 
   await db
     .update(taskOffers)
     .set({ status: "accepted", respondedAt: new Date() })
     .where(eq(taskOffers.id, offerId));
+
+  await updateAcceptanceRate(contractor.id);
 
   return { success: true };
 }
@@ -76,17 +129,65 @@ export async function rejectTask(offerId: string, reason?: string) {
     .set({ status: "rejected", respondedAt: new Date(), rejectionReason: reason ?? null })
     .where(eq(taskOffers.id, offerId));
 
+  await updateAcceptanceRate(contractor.id);
+
   return { success: true };
 }
 
 export async function getActiveTasks() {
   const contractor = await requireContractor();
 
-  return db
+  const offers = await db
     .select()
     .from(taskOffers)
     .where(and(eq(taskOffers.contractorId, contractor.id), eq(taskOffers.status, "accepted")))
     .orderBy(desc(taskOffers.offeredAt));
+
+  const tasksWithRevisionStatus = await Promise.all(
+    offers.map(async (offer) => {
+      const latestDeliverable = await db
+        .select()
+        .from(deliverables)
+        .where(
+          and(
+            eq(deliverables.taskId, offer.taskId),
+            eq(deliverables.contractorId, contractor.id)
+          )
+        )
+        .orderBy(desc(deliverables.submittedAt))
+        .limit(1);
+
+      const d = latestDeliverable[0];
+
+      return {
+        ...offer,
+        needsRevision: d?.status === "revision_requested",
+        revisionNumber: d?.revisionNumber ?? 0,
+        lastDeliverableStatus: d?.status ?? null,
+      };
+    })
+  );
+
+  return tasksWithRevisionStatus;
+}
+
+export async function getRevisionDetails(taskId: string) {
+  const contractor = await requireContractor();
+
+  const allDeliverables = await db
+    .select()
+    .from(deliverables)
+    .where(
+      and(eq(deliverables.taskId, taskId), eq(deliverables.contractorId, contractor.id))
+    )
+    .orderBy(desc(deliverables.submittedAt));
+
+  return {
+    deliverables: allDeliverables,
+    canRevise: allDeliverables.length > 0 && allDeliverables[0].status === "revision_requested" && allDeliverables[0].revisionNumber < 2,
+    revisionCount: allDeliverables[0]?.revisionNumber ?? 0,
+    maxRevisionsReached: (allDeliverables[0]?.revisionNumber ?? 0) >= 2,
+  };
 }
 
 export async function submitDeliverable(taskId: string, content: string, fileUrls: string[]) {

@@ -50,4 +50,5 @@ export const taskSessions = pgTable("task_sessions", {
   totalTokensUsed: integer("total_tokens_used").default(0),
   totalCost: numeric("total_cost", { precision: 10, scale: 6 }).default("0"),
   status: varchar("status", { length: 50 }).notNull().default("active"),
+  workspaceSnapshot: text("workspace_snapshot"),
 });

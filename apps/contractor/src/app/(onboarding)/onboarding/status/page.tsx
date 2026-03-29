@@ -10,6 +10,8 @@ const PIPELINE_STEPS = [
   { key: "approved", label: "Approved", icon: CheckCircle2 },
 ] as const;
 
+const REAPPLICATION_COOLDOWN_DAYS = 30;
+
 export default async function OnboardingStatusPage() {
   const contractor = await getContractorOrRedirect();
   if (!contractor) redirect("/sign-in");
@@ -17,6 +19,16 @@ export default async function OnboardingStatusPage() {
 
   const currentStepIndex = PIPELINE_STEPS.findIndex((s) => s.key === contractor.onboardingStatus);
   const isRejected = contractor.onboardingStatus === "rejected";
+
+  let canReapply = false;
+  let daysUntilReapply = 0;
+
+  if (isRejected) {
+    const rejectedAt = contractor.updatedAt;
+    const cooldownEnd = new Date(rejectedAt.getTime() + REAPPLICATION_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+    canReapply = new Date() >= cooldownEnd;
+    daysUntilReapply = Math.max(0, Math.ceil((cooldownEnd.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+  }
 
   return (
     <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-8">
@@ -30,9 +42,25 @@ export default async function OnboardingStatusPage() {
           <XCircle className="mx-auto mb-3 h-12 w-12 text-[var(--color-destructive)]" />
           <h3 className="text-lg font-semibold">Application Not Approved</h3>
           <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">
-            Unfortunately, we&apos;re unable to move forward with your application at this time.
-            You may reapply after 30 days.
+            Unfortunately, your assessment score did not meet the minimum threshold.
+            {contractor.assessmentScore && (
+              <> Your score was <strong>{contractor.assessmentScore}</strong> (minimum: 50).</>
+            )}
           </p>
+          <div className="mt-4">
+            {canReapply ? (
+              <Link
+                href="/onboarding/register"
+                className="inline-block rounded-lg bg-[var(--color-primary)] px-6 py-3 text-sm font-medium text-[var(--color-primary-foreground)] hover:opacity-90"
+              >
+                Reapply Now
+              </Link>
+            ) : (
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                You may reapply in <strong>{daysUntilReapply}</strong> day{daysUntilReapply !== 1 ? "s" : ""}.
+              </p>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-4">

@@ -2,11 +2,10 @@
 
 import { useChatStore } from "@/stores/chat-store";
 import { useWorkspaceStore } from "@/stores/workspace-store";
-import { useState, useRef, useEffect } from "react";
-import { X, Send, Paperclip, Loader2 } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { X, Send, Paperclip, Loader2, WifiOff } from "lucide-react";
 import { MessageBubble } from "./message-bubble";
 import { CommandPalette } from "./command-palette";
-import { cn } from "@/lib/utils";
 
 interface Message {
   id: string;
@@ -17,19 +16,41 @@ interface Message {
 
 export function ChatPanel() {
   const { isOpen, setOpen } = useChatStore();
-  const { currentNoteId } = useWorkspaceStore();
+  const { currentNoteId, currentWorkspaceId } = useWorkspaceStore();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [showCommands, setShowCommands] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async () => {
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch(`/api/chat?workspaceId=${currentWorkspaceId ?? ""}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((history: Message[]) => {
+        if (history.length > 0) {
+          setMessages(
+            history
+              .sort(
+                (a, b) =>
+                  new Date(a.createdAt).getTime() -
+                  new Date(b.createdAt).getTime()
+              )
+              .slice(-50)
+          );
+        }
+      })
+      .catch(() => {});
+  }, [isOpen, currentWorkspaceId]);
+
+  const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
 
@@ -48,6 +69,9 @@ export function ChatPanel() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsStreaming(true);
+    setConnectionError(false);
+
+    abortRef.current = new AbortController();
 
     try {
       const res = await fetch("/api/chat", {
@@ -56,10 +80,18 @@ export function ChatPanel() {
         body: JSON.stringify({
           message: trimmed,
           noteContext: currentNoteId,
+          workspaceId: currentWorkspaceId,
         }),
+        signal: abortRef.current.signal,
       });
 
-      if (!res.ok) throw new Error("Chat request failed");
+      if (!res.ok) {
+        if (res.status === 503) {
+          setConnectionError(true);
+          throw new Error("Platform C unavailable");
+        }
+        throw new Error(`Chat request failed: ${res.status}`);
+      }
 
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
@@ -88,25 +120,36 @@ export function ChatPanel() {
           );
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: "Sorry, something went wrong. Please try again.",
+          content: connectionError
+            ? "The AI engine is currently unreachable. Your message has been saved and will be processed when the connection is restored."
+            : "Sorry, something went wrong. Please try again.",
           createdAt: new Date().toISOString(),
         },
       ]);
     } finally {
       setIsStreaming(false);
+      abortRef.current = null;
     }
-  };
+  }, [input, isStreaming, currentNoteId, currentWorkspaceId, connectionError]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+    if (e.key === "Escape") {
+      setShowCommands(false);
+      if (isStreaming && abortRef.current) {
+        abortRef.current.abort();
+      }
+      return;
     }
     if (input === "/" || (input.startsWith("/") && e.key !== "Escape")) {
       setShowCommands(true);
@@ -129,13 +172,18 @@ export function ChatPanel() {
         </button>
       </div>
 
+      {connectionError && (
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-400">
+          <WifiOff className="h-3.5 w-3.5 shrink-0" />
+          Engine connection issue — messages are saved locally
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center text-center text-sm text-zinc-400">
             <p className="font-medium">How can I help?</p>
-            <p className="mt-1">
-              Ask anything, or use / for commands
-            </p>
+            <p className="mt-1">Ask anything, or use / for commands</p>
           </div>
         )}
         {messages.map((msg) => (
@@ -153,7 +201,7 @@ export function ChatPanel() {
         {showCommands && (
           <CommandPalette
             query={input}
-            onSelect={(cmd) => {
+            onSelect={() => {
               setShowCommands(false);
               setInput("");
             }}

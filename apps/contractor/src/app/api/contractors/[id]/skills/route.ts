@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@8gent/db/client";
 import { contractors, contractorSkills } from "@8gent/db/schema";
 import { eq } from "drizzle-orm";
+import { validateServiceAuth } from "@/lib/s2s-auth";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const authError = validateServiceAuth(req);
+  if (authError) return authError;
+
   const { id } = await params;
 
   const [contractor] = await db

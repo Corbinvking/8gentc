@@ -12,7 +12,14 @@ export async function GET(
   try {
     const deliverables = await platformCClient.tasks.getDeliverables(taskId);
     return NextResponse.json(deliverables);
-  } catch {
-    return NextResponse.json([]);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("404")) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+    return NextResponse.json(
+      { error: "Engine unavailable", deliverables: [] },
+      { status: 502 }
+    );
   }
 }

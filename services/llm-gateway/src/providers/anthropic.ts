@@ -59,6 +59,47 @@ export class AnthropicProvider implements LLMProviderAdapter {
     }
   }
 
+  async *stream(request: LLMRequest): AsyncGenerator<string, LLMResponse> {
+    const model = request.model ?? "claude-sonnet-4-20250514";
+    this.totalCalls++;
+
+    try {
+      const stream = this.client.messages.stream({
+        model,
+        max_tokens: request.maxTokens ?? 4096,
+        temperature: request.temperature ?? 0.7,
+        system: request.systemPrompt ?? "",
+        messages: [{ role: "user", content: request.prompt }],
+      });
+
+      let fullText = "";
+
+      for await (const event of stream) {
+        if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+          fullText += event.delta.text;
+          yield event.delta.text;
+        }
+      }
+
+      const finalMessage = await stream.finalMessage();
+      this.health.available = true;
+      this.health.lastChecked = new Date();
+
+      return {
+        text: fullText,
+        model,
+        inputTokens: finalMessage.usage.input_tokens,
+        outputTokens: finalMessage.usage.output_tokens,
+        finishReason: finalMessage.stop_reason ?? "end_turn",
+      };
+    } catch (err) {
+      this.errorCalls++;
+      this.health.errorRate = this.errorCalls / this.totalCalls;
+      this.health.lastError = (err as Error).message;
+      throw err;
+    }
+  }
+
   async healthCheck(): Promise<LLMProviderHealth> {
     try {
       const start = Date.now();

@@ -11,6 +11,7 @@ export * from "./telemetry";
 export * from "./billing";
 export * from "./chat-messages";
 export * from "./notifications";
+export * from "./notification-preferences";
 export * from "./workstreams";
 export * from "./llm-calls";
 export * from "./agent-outputs";

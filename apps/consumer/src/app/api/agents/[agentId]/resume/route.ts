@@ -12,7 +12,14 @@ export async function POST(
   try {
     const agent = await platformCClient.agents.resume(agentId);
     return NextResponse.json(agent);
-  } catch {
-    return NextResponse.json({ error: "Failed to resume" }, { status: 500 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("404")) {
+      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    }
+    return NextResponse.json(
+      { error: "Engine unavailable — unable to resume agent" },
+      { status: 502 }
+    );
   }
 }

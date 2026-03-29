@@ -30,12 +30,28 @@ interface NoteEditorProps {
   editable?: boolean;
 }
 
+const DEBOUNCE_MS = 800;
+
 export function NoteEditor({
   content,
   onUpdate,
   editable = true,
 }: NoteEditorProps) {
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingContentRef = useRef<string | null>(null);
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
+  const flushPendingSave = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (pendingContentRef.current !== null) {
+      onUpdateRef.current(pendingContentRef.current);
+      pendingContentRef.current = null;
+    }
+  }, []);
 
   const editor = useEditor({
     extensions: [
@@ -55,10 +71,14 @@ export function NoteEditor({
     content,
     editable,
     onUpdate: ({ editor: e }) => {
+      const html = e.getHTML();
+      pendingContentRef.current = html;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        onUpdate(e.getHTML());
-      }, 500);
+        pendingContentRef.current = null;
+        onUpdateRef.current(html);
+        debounceRef.current = null;
+      }, DEBOUNCE_MS);
     },
     editorProps: {
       attributes: {
@@ -69,10 +89,13 @@ export function NoteEditor({
   });
 
   useEffect(() => {
+    const handleBeforeUnload = () => flushPendingSave();
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      flushPendingSave();
     };
-  }, []);
+  }, [flushPendingSave]);
 
   const setLink = useCallback(() => {
     if (!editor) return;
@@ -83,7 +106,12 @@ export function NoteEditor({
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
       return;
     }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+    editor
+      .chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href: url })
+      .run();
   }, [editor]);
 
   if (!editor) return null;
@@ -149,7 +177,11 @@ export function NoteEditor({
             icon={Quote}
           />
           <div className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-700" />
-          <ToolbarButton onClick={setLink} active={editor.isActive("link")} icon={LinkIcon} />
+          <ToolbarButton
+            onClick={setLink}
+            active={editor.isActive("link")}
+            icon={LinkIcon}
+          />
           <div className="mx-1 h-5 w-px bg-zinc-200 dark:bg-zinc-700" />
           <ToolbarButton
             onClick={() => editor.chain().focus().undo().run()}

@@ -36,6 +36,7 @@
     "recharts": "^2",
     "sonner": "^2",
     "stripe": "^17",
+    "resend": "^4",
     "svix": "^1",
     "tailwind-merge": "^2",
     "zustand": "^5"

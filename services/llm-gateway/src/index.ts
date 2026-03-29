@@ -1,6 +1,8 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { z } from "zod";
+import Redis from "ioredis";
+import postgres from "postgres";
 import { LLMRouter } from "./router/index.js";
 import { AnthropicProvider, OpenAIProvider, GoogleProvider, calculateCost } from "./providers/index.js";
 import { SemanticCache } from "./cache/index.js";
@@ -14,6 +16,15 @@ const DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://postgres:postgres
 
 const app = Fastify({ logger: true });
 await app.register(cors);
+
+app.setErrorHandler((error, request, reply) => {
+  request.log.error(error);
+  reply.status(error.statusCode ?? 500).send({
+    error: error.message,
+    statusCode: error.statusCode ?? 500,
+    service: "llm-gateway",
+  });
+});
 
 const router = new LLMRouter();
 router.registerProvider(new AnthropicProvider());
@@ -36,15 +47,16 @@ const completionSchema = z.object({
   maxTokens: z.number().optional(),
   temperature: z.number().optional(),
   systemPrompt: z.string().optional(),
+  stream: z.boolean().optional(),
 });
 
 app.post("/llm/complete", async (request, reply) => {
   const parsed = completionSchema.safeParse(request.body);
   if (!parsed.success) {
-    return reply.status(400).send({ error: parsed.error.flatten() });
+    return reply.status(400).send({ error: "Invalid request", details: parsed.error.flatten() });
   }
 
-  const { prompt, context, taskType, userId, agentId, maxTokens, temperature, systemPrompt } = parsed.data;
+  const { prompt, context, taskType, userId, agentId, maxTokens, temperature, systemPrompt, stream } = parsed.data;
 
   const budgetCheck = await budget.checkBudget(userId, agentId, maxTokens ?? 4096);
   if (!budgetCheck.allowed) {
@@ -53,6 +65,10 @@ app.post("/llm/complete", async (request, reply) => {
       warning: budgetCheck.warning,
       userStatus: budgetCheck.userStatus,
     });
+  }
+
+  if (stream) {
+    return handleStreamingRequest(request, reply, parsed.data, budgetCheck);
   }
 
   const cached = await cache.get(userId, prompt, systemPrompt);
@@ -124,12 +140,109 @@ app.post("/llm/complete", async (request, reply) => {
   return reply.send(response);
 });
 
+async function handleStreamingRequest(
+  request: any,
+  reply: any,
+  data: z.infer<typeof completionSchema>,
+  budgetCheck: any
+) {
+  const { prompt, context, taskType, userId, agentId, maxTokens, temperature, systemPrompt } = data;
+  const fullPrompt = context ? `${context}\n\n${prompt}` : prompt;
+  const start = Date.now();
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+
+  try {
+    const gen = router.executeStream(
+      { prompt: fullPrompt, systemPrompt, maxTokens, temperature },
+      taskType,
+      context?.length
+    );
+
+    let result: IteratorResult<string, { response: any; provider: string; tier: string }>;
+
+    do {
+      result = await gen.next();
+      if (!result.done && typeof result.value === "string") {
+        reply.raw.write(`data: ${JSON.stringify({ type: "text", content: result.value })}\n\n`);
+      }
+    } while (!result.done);
+
+    const finalResult = result.value;
+    const cost = calculateCost(
+      finalResult.response.model,
+      finalResult.response.inputTokens,
+      finalResult.response.outputTokens
+    );
+
+    await Promise.all([
+      budget.recordUsage(
+        userId,
+        agentId,
+        finalResult.response.inputTokens + finalResult.response.outputTokens
+      ),
+      cache.set(userId, prompt, systemPrompt, {
+        response: finalResult.response.text,
+        model: finalResult.response.model,
+        inputTokens: finalResult.response.inputTokens,
+        outputTokens: finalResult.response.outputTokens,
+        cachedAt: Date.now(),
+      }, taskType),
+    ]);
+
+    const completionResponse: LLMCompletionResponse = {
+      response: finalResult.response.text,
+      modelUsed: finalResult.response.model,
+      provider: finalResult.provider as never,
+      inputTokens: finalResult.response.inputTokens,
+      outputTokens: finalResult.response.outputTokens,
+      cost,
+      latencyMs: Date.now() - start,
+      cacheHit: false,
+    };
+
+    meter.record(userId, agentId, undefined, finalResult.provider, completionResponse, taskType);
+
+    reply.raw.write(
+      `data: ${JSON.stringify({ type: "done", ...completionResponse })}\n\n`
+    );
+  } catch (err) {
+    reply.raw.write(
+      `data: ${JSON.stringify({ type: "error", message: (err as Error).message })}\n\n`
+    );
+  }
+
+  reply.raw.end();
+}
+
 app.get("/health", async () => {
+  let redisOk = false;
+  let dbOk = false;
+
+  try {
+    const redis = new Redis(REDIS_URL);
+    await redis.ping();
+    redis.disconnect();
+    redisOk = true;
+  } catch { /* redis down */ }
+
+  try {
+    const client = postgres(DATABASE_URL);
+    await client`SELECT 1`;
+    await client.end();
+    dbOk = true;
+  } catch { /* db down */ }
+
   return {
-    status: "ok",
+    status: redisOk && dbOk ? "ok" : "degraded",
     service: "llm-gateway",
     providers: router.listProviders(),
     cacheStats: cache.getStats(),
+    dependencies: { redis: redisOk, database: dbOk },
   };
 });
 

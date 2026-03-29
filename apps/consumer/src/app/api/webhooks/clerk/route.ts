@@ -43,29 +43,53 @@ export async function POST(req: Request) {
     const email = email_addresses[0]?.email_address;
     if (!email) return new Response("No email", { status: 400 });
 
-    await db.insert(users).values({
-      id: crypto.randomUUID(),
-      email,
-      name: [first_name, last_name].filter(Boolean).join(" ") || "User",
-      avatarUrl: image_url ?? null,
-      clerkId: id,
-      plan: "free",
+    const existing = await db.query.users.findFirst({
+      where: eq(users.clerkId, id),
     });
+
+    if (!existing) {
+      await db.insert(users).values({
+        id: crypto.randomUUID(),
+        email,
+        name: [first_name, last_name].filter(Boolean).join(" ") || "User",
+        avatarUrl: image_url ?? null,
+        clerkId: id,
+        plan: "free",
+      });
+    }
   }
 
   if (eventType === "user.updated") {
     const { id, email_addresses, first_name, last_name, image_url } = evt.data;
     const email = email_addresses[0]?.email_address;
+    const name = [first_name, last_name].filter(Boolean).join(" ");
 
-    await db
-      .update(users)
-      .set({
-        email: email ?? undefined,
-        name: [first_name, last_name].filter(Boolean).join(" ") || undefined,
-        avatarUrl: image_url ?? undefined,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.clerkId, id));
+    const existing = await db.query.users.findFirst({
+      where: eq(users.clerkId, id),
+    });
+
+    if (existing) {
+      await db
+        .update(users)
+        .set({
+          ...(email && { email }),
+          ...(name && { name }),
+          avatarUrl: image_url ?? existing.avatarUrl,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.clerkId, id));
+    } else {
+      if (email) {
+        await db.insert(users).values({
+          id: crypto.randomUUID(),
+          email,
+          name: name || "User",
+          avatarUrl: image_url ?? null,
+          clerkId: id,
+          plan: "free",
+        });
+      }
+    }
   }
 
   if (eventType === "user.deleted") {

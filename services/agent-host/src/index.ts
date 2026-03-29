@@ -11,6 +11,16 @@ const PORT = Number(process.env.PORT) || 3003;
 const app = Fastify({ logger: true });
 await app.register(cors);
 
+app.setErrorHandler((error, request, reply) => {
+  request.log.error(error);
+  const statusCode = error.statusCode ?? 500;
+  reply.status(statusCode).send({
+    error: statusCode >= 500 ? "Internal server error" : error.message,
+    statusCode,
+    service: "agent-host",
+  });
+});
+
 const containerManager = new ContainerManager();
 const healthMonitor = new HealthMonitor(containerManager);
 const scaler = new Scaler(containerManager);
@@ -19,11 +29,19 @@ healthMonitor.start();
 
 app.get("/health", async () => {
   const metrics = scaler.getMetrics();
+  let dockerOk = false;
+
+  try {
+    await containerManager.listAll();
+    dockerOk = true;
+  } catch { /* docker daemon not reachable */ }
+
   return {
-    status: "ok",
+    status: dockerOk ? "ok" : "degraded",
     service: "agent-host",
     containers: metrics.totalContainers,
     running: metrics.runningContainers,
+    dependencies: { docker: dockerOk },
   };
 });
 

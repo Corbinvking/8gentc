@@ -26,6 +26,7 @@ export interface LLMProviderAdapter {
   readonly name: string;
   readonly models: string[];
   complete(request: LLMRequest): Promise<LLMResponse>;
+  stream?(request: LLMRequest): AsyncGenerator<string, LLMResponse>;
   healthCheck(): Promise<LLMProviderHealth>;
 }
 

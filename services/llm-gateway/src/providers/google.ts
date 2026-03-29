@@ -61,6 +61,55 @@ export class GoogleProvider implements LLMProviderAdapter {
     }
   }
 
+  async *stream(request: LLMRequest): AsyncGenerator<string, LLMResponse> {
+    const modelName = request.model ?? "gemini-2.0-flash";
+    this.totalCalls++;
+
+    try {
+      const model = this.client.getGenerativeModel({
+        model: modelName,
+        systemInstruction: request.systemPrompt,
+      });
+
+      const result = await model.generateContentStream({
+        contents: [{ role: "user", parts: [{ text: request.prompt }] }],
+        generationConfig: {
+          maxOutputTokens: request.maxTokens ?? 4096,
+          temperature: request.temperature ?? 0.7,
+        },
+      });
+
+      let fullText = "";
+
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) {
+          fullText += text;
+          yield text;
+        }
+      }
+
+      const finalResponse = await result.response;
+      const usage = finalResponse.usageMetadata;
+
+      this.health.available = true;
+      this.health.lastChecked = new Date();
+
+      return {
+        text: fullText,
+        model: modelName,
+        inputTokens: usage?.promptTokenCount ?? 0,
+        outputTokens: usage?.candidatesTokenCount ?? 0,
+        finishReason: "stop",
+      };
+    } catch (err) {
+      this.errorCalls++;
+      this.health.errorRate = this.errorCalls / this.totalCalls;
+      this.health.lastError = (err as Error).message;
+      throw err;
+    }
+  }
+
   async healthCheck(): Promise<LLMProviderHealth> {
     try {
       const start = Date.now();

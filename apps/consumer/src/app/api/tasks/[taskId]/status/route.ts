@@ -12,7 +12,22 @@ export async function GET(
   try {
     const status = await platformCClient.tasks.getStatus(taskId);
     return NextResponse.json(status);
-  } catch {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("404")) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+    return NextResponse.json(
+      {
+        error: "Engine unavailable",
+        fallback: {
+          taskId,
+          status: "unknown",
+          milestones: [],
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      { status: 502 }
+    );
   }
 }
