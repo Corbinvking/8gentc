@@ -36,6 +36,11 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/8gent
       REDIS_URL: redis://redis:6379
+      LLM_GATEWAY_URL: http://llm-gateway:3002
+      AGENT_HOST_URL: http://agent-host:3003
+      PLATFORM_B_URL: ${PLATFORM_B_URL:-http://host.docker.internal:3010}
+      PLATFORM_C_SERVICE_TOKEN: ${PLATFORM_C_SERVICE_TOKEN:-}
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,8 +54,14 @@ services:
     ports:
       - "3002:3002"
     environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/8gent
       REDIS_URL: redis://redis:6379
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -63,11 +74,15 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/8gent
       REDIS_URL: redis://redis:6379
+      LLM_GATEWAY_URL: http://llm-gateway:3002
+      ENGINE_API_URL: http://engine:3001
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   postgres_data:

@@ -21,6 +21,8 @@ const PUBLIC_PREFIXES = [
   "/internal/",
 ];
 
+const SERVICE_API_KEY = process.env.SERVICE_API_KEY;
+
 export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
@@ -28,6 +30,12 @@ export async function authMiddleware(
   const path = request.url.split("?")[0];
 
   if (PUBLIC_PATHS.has(path) || PUBLIC_PREFIXES.some((p) => path.startsWith(p))) {
+    return;
+  }
+
+  const apiKey = request.headers["x-api-key"] as string | undefined;
+  if (SERVICE_API_KEY && apiKey && apiKey === SERVICE_API_KEY) {
+    request.authUser = { userId: "service", role: "admin" };
     return;
   }
 

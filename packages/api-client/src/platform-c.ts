@@ -15,8 +15,13 @@ import type {
 } from "@8gent/shared";
 
 const ENGINE_API_URL = process.env.ENGINE_API_URL ?? "http://localhost:3001";
+const SERVICE_TOKEN = process.env.PLATFORM_C_SERVICE_TOKEN ?? "";
 
 const PLATFORM_C_TIMEOUT_MS = 60_000;
+
+function serviceHeaders(): Record<string, string> {
+  return SERVICE_TOKEN ? { "X-API-Key": SERVICE_TOKEN, "X-Service": "platform-a" } : {};
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
@@ -28,6 +33,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
+        ...serviceHeaders(),
         ...options?.headers,
       },
     });
@@ -57,7 +63,7 @@ function streamRequest(
       try {
         const res = await fetch(`${ENGINE_API_URL}${path}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...serviceHeaders() },
           body: JSON.stringify(body),
           signal: abortController.signal,
         });
