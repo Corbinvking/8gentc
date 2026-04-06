@@ -9,6 +9,7 @@ COPY packages/shared/package.json ./packages/shared/
 COPY packages/db/package.json ./packages/db/
 COPY packages/8gentc/package.json ./packages/8gentc/
 COPY packages/swarm/package.json ./packages/swarm/
+COPY packages/api-client/package.json ./packages/api-client/
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
