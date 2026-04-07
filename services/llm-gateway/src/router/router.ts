@@ -26,16 +26,16 @@ export class LLMRouter {
     const tier = classifyComplexity({ prompt, taskType, contextLength });
     const models = TIER_MODELS[tier];
 
-    const primary = this.providerPriority[0];
+    const primary = this.providerPriority[0] ?? "anthropic";
     const fallbacks = this.providerPriority.slice(1);
 
     return {
       provider: primary,
-      model: models[primary] ?? Object.values(models)[0],
+      model: models[primary] ?? Object.values(models)[0] ?? "",
       tier,
       fallbackChain: fallbacks.map((p) => ({
         provider: p,
-        model: models[p] ?? Object.values(models)[0],
+        model: models[p] ?? Object.values(models)[0] ?? "",
       })),
     };
   }
@@ -69,7 +69,7 @@ export class LLMRouter {
           lastError = err as Error;
           if (retry < 2) {
             await new Promise((r) =>
-              setTimeout(r, RETRY_DELAYS[retry] + Math.random() * 200)
+              setTimeout(r, (RETRY_DELAYS[retry] ?? 500) + Math.random() * 200)
             );
           }
         }

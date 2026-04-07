@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyError } from "fastify";
 import cors from "@fastify/cors";
 import { ContainerManager } from "./provisioner/container-manager.js";
 import { HealthMonitor } from "./health/monitor.js";
@@ -11,7 +11,7 @@ const PORT = Number(process.env.PORT) || 3003;
 const app = Fastify({ logger: true });
 await app.register(cors);
 
-app.setErrorHandler((error, request, reply) => {
+app.setErrorHandler((error: FastifyError, request, reply) => {
   request.log.error(error);
   const statusCode = error.statusCode ?? 500;
   reply.status(statusCode).send({

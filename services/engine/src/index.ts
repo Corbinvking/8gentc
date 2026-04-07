@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyError } from "fastify";
 import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import Redis from "ioredis";
@@ -27,7 +27,7 @@ const DATABASE_URL = process.env.DATABASE_URL ?? "postgresql://postgres:postgres
 
 const app = Fastify({ logger: true });
 
-app.setErrorHandler((error, request, reply) => {
+app.setErrorHandler((error: FastifyError, request, reply) => {
   request.log.error(error);
   const statusCode = error.statusCode ?? 500;
   reply.status(statusCode).send({

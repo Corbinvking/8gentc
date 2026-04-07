@@ -33,7 +33,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         throw new Error(`Platform B API error ${res.status}: ${body}`);
       }
 
-      return res.json();
+      return res.json() as Promise<T>;
     } catch (err) {
       lastError = err as Error;
       if ((err as Error).name === "AbortError") {
@@ -41,7 +41,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         throw new Error(`Platform B request timed out after ${TIMEOUT_MS}ms: ${path}`);
       }
       if (attempt < MAX_RETRIES) {
-        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt] ?? 500));
       }
     }
   }

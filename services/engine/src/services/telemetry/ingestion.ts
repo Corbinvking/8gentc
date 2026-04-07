@@ -30,7 +30,7 @@ export async function ingestEvent(event: IngestEvent): Promise<string> {
 export async function ingestBatch(events: IngestEvent[]): Promise<string[]> {
   const ids = events.map(() => nanoid());
   const values = events.map((event, i) => ({
-    id: ids[i],
+    id: ids[i]!,
     type: event.type,
     userId: event.userId,
     agentId: event.agentId,

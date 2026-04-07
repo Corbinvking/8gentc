@@ -21,7 +21,7 @@ export async function dequeueNext(count = 10): Promise<QueuedWorkstream[]> {
   const results: QueuedWorkstream[] = [];
   for (let i = 0; i < items.length; i += 2) {
     try {
-      results.push(JSON.parse(items[i]));
+      results.push(JSON.parse(items[i]!));
     } catch {
       // skip malformed
     }

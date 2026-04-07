@@ -29,14 +29,14 @@ const PLAN_LIMITS: Record<UserPlan, ResourceLimits> = {
 };
 
 export function getLimitsForPlan(plan: UserPlan): ResourceLimits {
-  return PLAN_LIMITS[plan];
+  return PLAN_LIMITS[plan]!;
 }
 
 export function canSpawnAgent(
   plan: UserPlan,
   currentAgentCount: number
 ): boolean {
-  const limits = PLAN_LIMITS[plan];
+  const limits = PLAN_LIMITS[plan]!;
   return currentAgentCount < limits.maxAgents;
 }
 

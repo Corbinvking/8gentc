@@ -41,7 +41,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       const body = await res.text().catch(() => "");
       throw new Error(`Platform C API error ${res.status}: ${body}`);
     }
-    return res.json();
+    return res.json() as Promise<T>;
   } finally {
     clearTimeout(timeout);
   }
@@ -259,7 +259,7 @@ export const platformCClient = {
 
   chat: {
     sendMessage(payload: ChatMessagePayload): ReadableStream<Uint8Array> {
-      return streamRequest("/chat/message", payload);
+      return streamRequest("/chat/message", payload as unknown as Record<string, unknown>);
     },
   },
 

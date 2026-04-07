@@ -103,7 +103,7 @@ export class LLMMeter {
       sql`SELECT model, SUM(tokens_in)::int as tokens_in, SUM(tokens_out)::int as tokens_out, SUM(cost::numeric)::float as cost, COUNT(*)::int as calls, SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END)::int as cache_hits FROM llm_calls WHERE user_id = ${userId} AND timestamp >= ${periodStart} AND timestamp <= ${periodEnd} GROUP BY model`
     );
 
-    const rows = result.rows as Array<{
+    const rows = result as unknown as Array<{
       model: string;
       tokens_in: number;
       tokens_out: number;

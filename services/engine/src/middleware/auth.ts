@@ -27,7 +27,7 @@ export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  const path = request.url.split("?")[0];
+  const path = request.url.split("?")[0] ?? "/";
 
   if (PUBLIC_PATHS.has(path) || PUBLIC_PREFIXES.some((p) => path.startsWith(p))) {
     return;
@@ -51,7 +51,7 @@ export async function authMiddleware(
     const decoded = decodeJWT(token);
     request.authUser = {
       userId: decoded.sub,
-      role: decoded.role ?? "user",
+      role: (decoded.role as "user" | "contractor" | "admin" | undefined) ?? "user",
       plan: decoded.plan,
     };
   } catch (err) {
@@ -66,7 +66,7 @@ function decodeJWT(token: string): { sub: string; role?: string; plan?: string; 
   let payload: Record<string, unknown>;
   try {
     payload = JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf-8")
+      Buffer.from(parts[1]!, "base64url" as BufferEncoding).toString("utf-8")
     );
   } catch {
     throw new Error("Invalid JWT payload encoding");

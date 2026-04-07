@@ -69,16 +69,6 @@ export interface TaskOffer {
 
 export type TaskOfferStatus = "pending" | "accepted" | "rejected" | "expired";
 
-export interface Deliverable {
-  id: string;
-  taskId: string;
-  contractorId: string;
-  content: string;
-  fileUrls: string[];
-  revisionOf?: string;
-  submittedAt: Date;
-}
-
 export interface TaskClarification {
   id: string;
   taskId: string;

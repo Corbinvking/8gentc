@@ -42,7 +42,7 @@ export async function callLLM(opts: LLMCallOptions): Promise<LLMCallResult> {
     throw new Error(`LLM Gateway error (${res.status}): ${err}`);
   }
 
-  return res.json();
+  return res.json() as Promise<LLMCallResult>;
 }
 
 export async function* streamLLM(
